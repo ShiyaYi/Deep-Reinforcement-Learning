@@ -22,5 +22,3 @@ AND a.discharge_location='HOME'
 AND o.icustay_age_group='adult'
 AND o.oasis IS NOT NULL
 AND e.metastatic_cancer=0;
-
-\COPY (SELECT * FROM new_data) TO 'C:\Users\Shiya\Desktop\MIMIC-III\new_data.csv' WITH CSV
