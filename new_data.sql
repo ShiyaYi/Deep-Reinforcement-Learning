@@ -1,3 +1,4 @@
+\c mimic;
 set search_path to mimiciii;
 
 DROP TABLE IF EXISTS new_data;
