@@ -1,0 +1,409 @@
+---
+title: "PLACES_preliminary analysis"
+author: "Shiya Yi"
+date: "April 29, 2018"
+output: html_document
+keep_md: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+setwd("C:/Users/Shiya/Desktop/MIMIC-III/Data/1_EDA")
+```
+
+## Load the Data
+```{r}
+p<-read.csv(file="C:/Users/Shiya/Desktop/MIMIC-III/Data/places.csv", header=T, sep=",")
+```
+
+## Outcome Variables
+```{r}
+p$lag_day<-gsub("day.*", "", p$lag)
+p$lag_day<-as.numeric(as.character(p$lag_day), na.rm=T)
+summary(p$lag_day)
+p$lag_day<-ifelse(p$lag_day>=0, p$lag_day, NA)
+summary(p$lag_day)
+```
+```{r}
+p$lag_day_30<-as.factor(ifelse(p$lag_day<=30, 1, 0))
+summary.factor(p$lag_day_30)
+
+p$lag_day_90<-as.factor(ifelse(p$lag_day<=90, 1, 0))
+summary.factor(p$lag_day_90)
+```
+
+## Patient
+```{r}
+summary.factor(p$gender)
+
+p$age_truncated<-ifelse(p$age<=89, p$age, 89)
+summary(p$age_truncated)
+
+p$white<-grepl("WHITE", p$ethnicity)
+summary.factor(p$white)
+
+p$married<-grepl("MARRIED", p$marital_status)
+summary.factor(p$married)
+
+p$medic_insur<-ifelse(p$insurance=="Medicare" | p$insurance=="Medicaid", 1, 0)
+summary.factor(p$medic_insur)
+```
+## Length of Stay
+```{r}
+summary(p$los_icu)
+
+p$los_hos<-ifelse(p$los_hospital>=0, p$los_hospital, 0)
+summary(p$los_hos)
+```
+## Acuity of Admission
+```{r}
+p$acuity<-as.factor(ifelse(p$admission_type=="EMERGENCY" | p$admission_type=="URGENT", 1, 0))
+summary.factor(p$acuity)
+```
+## Co-morbidities -- 30 categories
+## Earlier Admissions
+```{r}
+p$earlier<-p$icustay_seq-1
+summary(p$earlier)
+```
+## Severity
+```{r}
+summary(p$oasis)
+```
+
+## Summarize the Data
+```{r}
+summary(p)
+```
+
+##  Recode Dummys as Factors & Create New Data
+```{r}
+if(!("devtools" %in% installed.packages()[,1])) {
+  install.packages("devtools")
+}
+library(devtools)
+
+if(!("MIMICbook" %in% installed.packages()[,1])) {
+  install_github("jraffa/MIMICbook")
+}
+library(MIMICbook)
+
+p2<-convert.bin.fac(p)
+summary(p2)
+```
+## Table One
+```{r}
+if(!("tableone" %in% installed.packages()[,1])) {
+  install.packages("tableone")
+}
+library(tableone)
+```
+
+```{r}
+CreateTableOne(vars=c("gender", "age_truncated", "white", "married", "medic_insur", "los_icu", "acuity", "earlier", "oasis",
+                      "congestive_heart_failure", "cardiac_arrhythmias", "valvular_disease", "pulmonary_circulation", "peripheral_vascular", 
+                      "hypertension", "paralysis", "other_neurological", "chronic_pulmonary", "diabetes_uncomplicated", 
+                      "diabetes_complicated", "hypothyroidism", "renal_failure", "liver_disease", "peptic_ulcer", 
+                      "aids", "lymphoma", "metastatic_cancer", "solid_tumor", "rheumatoid_arthritis", 
+                      "coagulopathy", "obesity", "weight_loss", "fluid_electrolyte", "blood_loss_anemia", 
+                      "deficiency_anemias", "alcohol_abuse", "drug_abuse", "psychoses", "depression"), 
+                       strata="lag_day_30", data=p2, test=T)
+```
+
+```{r}
+if(!("dplyr" %in% installed.packages()[,1])) {
+  install.packages("dplyr")
+}
+library(dplyr)
+
+CreateTableOne(vars=c("gender", "age_truncated", "white", "married", "medic_insur", "los_icu", "acuity", "earlier", "oasis",
+                      "congestive_heart_failure", "cardiac_arrhythmias", "valvular_disease", "pulmonary_circulation", "peripheral_vascular", 
+                      "hypertension", "paralysis", "other_neurological", "chronic_pulmonary", "diabetes_uncomplicated", 
+                      "diabetes_complicated", "hypothyroidism", "renal_failure", "liver_disease", "peptic_ulcer", 
+                      "aids", "lymphoma", "metastatic_cancer", "solid_tumor", "rheumatoid_arthritis", 
+                      "coagulopathy", "obesity", "weight_loss", "fluid_electrolyte", "blood_loss_anemia", 
+                      "deficiency_anemias", "alcohol_abuse", "drug_abuse", "psychoses", "depression"), 
+                       strata="lag_day_30", data=p2, test=T) %>% print(
+                         printToggle = FALSE,
+                         showAllLevels = TRUE,
+                         cramVars = "kon"
+                       ) %>%
+                       {data.frame(
+                         variable_name = gsub(" ", "&nbsp;", rownames(.), fixed=TRUE), .,
+                         row.names = NULL,
+                         check.names = FALSE,
+                         stringsAsFactors = FALSE)} %>%
+  knitr::kable()
+```
+
+## Bivariate Correlation between Age, LOS and OASIS, by 30/90-Day Readmission
+```{r}
+with(p2, plot(age_truncated, los_icu, col=lag_day_30, pch=19))
+legend('topright', legend=levels(p2$lag_day_30), col=1:3, cex=.8, pch=1)
+```
+```{r}
+with(p2, plot(age_truncated, oasis, col=lag_day_30, pch=19))
+legend('topright', legend=levels(p2$lag_day_30), col=1:3, cex=.8, pch=1)
+```
+
+## Relationship between Ethnicity+Insurance and 30/90-Day Readmission
+```{r}
+plot_prop_by_level(p2, "white", "lag_day_30", factor.var2="medic_insur" )
+plot_OR_by_level(p2, "white", "lag_day_30", factor.var2="medic_insur")
+```
+
+## Logistic Regression
+```{r}
+day30.glm<-glm(lag_day_30 ~ gender + age_truncated + white + married + medic_insur + los_icu + acuity + earlier + oasis +
+                    congestive_heart_failure + cardiac_arrhythmias + valvular_disease + pulmonary_circulation + peripheral_vascular +
+                    hypertension + paralysis + other_neurological + chronic_pulmonary + diabetes_uncomplicated +
+                    diabetes_complicated + hypothyroidism + renal_failure + liver_disease + peptic_ulcer + 
+                    aids + lymphoma + metastatic_cancer + solid_tumor + rheumatoid_arthritis +
+                    coagulopathy + obesity + weight_loss + fluid_electrolyte + blood_loss_anemia +
+                    deficiency_anemias + alcohol_abuse + drug_abuse + psychoses + depression, data=p2, family="binomial")
+summary(day30.glm)
+```
+
+```{r}
+library(sjPlot)
+sjp.glm(day30.glm)
+```
+
+```{r}
+exp(coef(day30.glm))
+exp(confint((day30.glm)))
+```
+
+## Model Selection -- AIC & BIC
+```{r}
+library(MASS)
+
+stepAIC(day30.glm, direction="both", k=2)
+stepAIC(day30.glm, direction="both", k=log(5635))
+```
+
+## Optimal Model based on AIC
+```{r}
+day30.glm.opt<-glm(lag_day_30 ~ gender + age_truncated + white + los_icu + acuity + oasis +
+                    congestive_heart_failure + cardiac_arrhythmias + pulmonary_circulation + peripheral_vascular +
+                    hypertension + other_neurological + hypothyroidism + peptic_ulcer + 
+                    lymphoma + metastatic_cancer + coagulopathy + obesity + fluid_electrolyte + blood_loss_anemia +
+                    drug_abuse + psychoses, data=p2, family="binomial")
+summary(day30.glm.opt)
+```
+
+## Prediction & Machine Learning
+```{r}
+if(!("plyr" %in% installed.packages()[,1])) {
+  install.packages("plyr")
+}
+library(plyr)
+
+if(!("Hmisc" %in% installed.packages()[,1])) {
+  install_github("Hmisc")
+}
+library(Hmisc)
+```
+
+```{r}
+p2$logRegPred30<-predict(day30.glm.opt, newdata=p2, type="response")
+hist(p2$logRegPred30, breaks=11)
+```
+
+## Set the cut-off at .5
+```{r}
+p2$logRegPred30.5<-p2$logRegPred30>.5
+predTab30<-table(p2$logRegPred30.5, p2$lag_day_30==1, dnn=c("Prediction", "30-Day Readmission"))
+predTab30
+```
+Accuracy for 30-Day Readmission Prediction = 0.7445701
+
+## Training & Testing
+```{r}
+set.seed(4444)
+library(caret)
+```
+
+```{r}
+trainIdx<-createDataPartition(p2$lag_day_30, p=.5)$Resample1
+p2Train<-p2[trainIdx,]
+p2Test<-p2[-trainIdx,]
+```
+
+```{r}
+train.glm<-glm(lag_day_30 ~ gender + age_truncated + white + los_icu + acuity + oasis +
+                    congestive_heart_failure + cardiac_arrhythmias + pulmonary_circulation + peripheral_vascular +
+                    hypertension + other_neurological + hypothyroidism + peptic_ulcer + 
+                    lymphoma + metastatic_cancer + coagulopathy + obesity + fluid_electrolyte + blood_loss_anemia +
+                    drug_abuse + psychoses, data=p2Train, family="binomial")
+summary(train.glm)
+```
+
+```{r}
+p2Train$logRegPred30<-predict(train.glm, newdata=p2Train, type="response")
+p2Train$logRegPred30.5<-p2Train$logRegPred30>.5
+
+predTabTr<-table(p2Train$logRegPred30.5, p2Train$lag_day_30==1, dnn=c("Predcition", "30-Day Readmission"))
+predTabTr
+```
+Accuracy for Training = 0.7480258
+
+```{r}
+p2Test$logRegPred30<-predict(train.glm, newdata=p2Test, type="response")
+p2Test$logRegPred30.5<-p2Test$logRegPred30>.5
+
+predTabTe<-table(p2Test$logRegPred30.5, p2Test$lag_day_30==1, dnn=c("Predcition", "30-Day Readmission"))
+predTabTe
+```
+Accuracy for Testing = 0.7421903
+
+## ROC Curves
+```{r}
+if(!("ROCR" %in% installed.packages()[,1])) {
+ install.packages("ROCR")
+ }
+library(ROCR)
+
+complete.p2Train<-p2Train[complete.cases(p2Train[c("logRegPred30", "lag_day_30")]),]
+
+predTr<-prediction(complete.p2Train$logRegPred30, complete.p2Train$lag_day_30)
+perfTr<-performance(predTr, "tpr", "fpr")
+plot(perfTr)
+text(.6, .2, paste0("AUC: ", round(performance(predTr, "auc")@y.values[[1]],3)))
+
+complete.p2Test<-p2Test[complete.cases(p2Test[c("logRegPred30", "lag_day_30")]),]
+
+predTe<-prediction(complete.p2Test$logRegPred30, complete.p2Test$lag_day_30)
+perfTe<-performance(predTe, "tpr", "fpr")
+lines(perfTe@x.values[[1]], perfTe@y.values[[1]], col='red')
+text(.6, .1, paste0("AUC: ", round(performance(predTe, "auc")@y.values[[1]],3)), col='red')
+```
+
+## Calibration
+```{r}
+if(!("gbm" %in% installed.packages()[,1])) {
+ install.packages("gbm")
+ }
+library(gbm)
+
+prop.table(table(p2Train$lag_day_30, cut2(p2Train$logRegPred30, seq(0, 1, .1))), 2)
+```
+```{r}
+gbm::calibrate.plot(p2Train$lag_day_30, p2Train$logRegPred30)
+```
+
+```{r}
+prop.table(table(p2Test$lag_day_30, cut2(p2Test$logRegPred30, seq(0, 1, .1))), 2)
+
+gbm::calibrate.plot(p2Test$lag_day_30, p2Test$logRegPred30)
+```
+
+```{r}
+if(!("sjstats" %in% installed.packages()[,1])) {
+ install.packages("sjstats")
+ }
+library(sjstats)
+
+hoslem_gof(train.glm,g=10)
+```
+
+## K-fold Cross Validation
+```{r}
+if(!("caret" %in% installed.packages()[,1])) {
+ install.packages("caret")
+ }
+library(caret)
+
+library(gbm)
+
+cvTr<-trainControl(method="cv", number=5, classProbs=TRUE, summaryFunction=twoClassSummary)
+```
+
+```{r}
+p2$lag_day_30<-as.factor(ifelse(p2$lag_day_30==1, "Yes", "No"))
+
+complete.p2<-p2[complete.cases(p2[c("logRegPred30", "lag_day_30")]),]
+
+
+re.tr.logit<-train(lag_day_30 ~ gender + age_truncated + white + los_icu + acuity + oasis +
+                    congestive_heart_failure + cardiac_arrhythmias + pulmonary_circulation + peripheral_vascular +
+                    hypertension + other_neurological + hypothyroidism + peptic_ulcer + 
+                    lymphoma + metastatic_cancer + coagulopathy + obesity + fluid_electrolyte + blood_loss_anemia +
+                    drug_abuse + psychoses, data=complete.p2, family="binomial", method="glm", trControl=cvTr, metric="ROC")
+print(re.tr.logit)
+```
+
+```{r}
+summary(re.tr.logit)
+```
+
+```{r}
+complete.p2$re.tr.logit.pred<-predict(re.tr.logit, newdata=complete.p2, type="prob")
+```
+
+## Simplify the model by AIC
+```{r}
+re.tr.logitaic<-train(lag_day_30 ~ gender + age_truncated + white + los_icu + acuity + 
+    oasis + congestive_heart_failure + cardiac_arrhythmias + 
+    pulmonary_circulation + peripheral_vascular + hypertension + 
+    other_neurological + hypothyroidism + peptic_ulcer + lymphoma + 
+    metastatic_cancer + coagulopathy + obesity + fluid_electrolyte + 
+    blood_loss_anemia + drug_abuse + psychoses, data=complete.p2, family="binomial", method="glmStepAIC", trControl=cvTr, metric="ROC", trace=0)
+print(re.tr.logitaic)
+```
+```{r}
+summary(re.tr.logitaic)
+```
+
+## Fit Logistic Regression with Tuning Parameters
+```{r}
+re.tr.logitglmnet<-train(lag_day_30 ~ gender + age_truncated + white + los_icu + acuity + 
+    oasis + congestive_heart_failure + cardiac_arrhythmias + 
+    pulmonary_circulation + peripheral_vascular + hypertension + 
+    other_neurological + hypothyroidism + peptic_ulcer + lymphoma + 
+    metastatic_cancer + coagulopathy + obesity + fluid_electrolyte + 
+    blood_loss_anemia + drug_abuse + psychoses, data=complete.p2, family="binomial", method="glmnet", trControl=cvTr, metric="ROC")
+print(re.tr.logitglmnet)
+```
+```{r}
+plot(re.tr.logitglmnet)
+plot(varImp(re.tr.logitglmnet))
+```
+
+## Random Forests
+```{r}
+re.tr.logitrf<-train(lag_day_30 ~ gender + age_truncated + white + los_icu + acuity + 
+    oasis + congestive_heart_failure + cardiac_arrhythmias + 
+    pulmonary_circulation + peripheral_vascular + hypertension + 
+    other_neurological + hypothyroidism + peptic_ulcer + lymphoma + 
+    metastatic_cancer + coagulopathy + obesity + fluid_electrolyte + 
+    blood_loss_anemia + drug_abuse + psychoses, data=complete.p2, family="binomial", method="rf", trControl=cvTr, importance=TRUE, metric="ROC")
+print(re.tr.logitrf)
+```
+```{r}
+plot(re.tr.logitrf)
+plot(varImp(re.tr.logitrf))
+```
+
+## Stochastic Gradient Boosting (GBM)
+```{r}
+re.tr.logitgbm<-train(lag_day_30 ~ gender + age_truncated + white + los_icu + acuity + 
+    oasis + congestive_heart_failure + cardiac_arrhythmias + 
+    pulmonary_circulation + peripheral_vascular + hypertension + 
+    other_neurological + hypothyroidism + peptic_ulcer + lymphoma + 
+    metastatic_cancer + coagulopathy + obesity + fluid_electrolyte + 
+    blood_loss_anemia + drug_abuse + psychoses, data=complete.p2, method="gbm", trControl=cvTr, verbose=FALSE, metric="ROC")
+print(re.tr.logitgbm)
+```
+```{r}
+plot(re.tr.logitgbm)
+plot(varImp(re.tr.logitgbm))
+```
+
+## Add Predicted Values to the Data
+```{r}
+complete.p2$logitpred<-predict(re.tr.logit, type="prob")[,2]
+complete.p2$glmnetpred<-predict(re.tr.logitglmnet, type="prob")[,2]
+complete.p2$rfpred<-predict(re.tr.logitrf, type="prob")[,2]
+complete.p2$gbmpred<-predict(re.tr.logitgbm, type="prob")[,2]
+```
